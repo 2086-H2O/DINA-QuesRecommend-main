@@ -319,7 +319,7 @@ def test1(n_stu, n_qus, n_kno, distribution=1, times=100):
     return df_result
 
 # # 模式数据为平均分布时，估计效果对比
-# print(test1(n_stu=1920, n_qus=30, n_kno=5, distribution=1))
+print(test1(n_stu=1920, n_qus=30, n_kno=5, distribution=1))
 # print(test1(n_stu=1920, n_qus=30, n_kno=5, distribution=2))
 # print(test1(n_stu=1920, n_qus=30, n_kno=5, distribution=3))
 

@@ -10,7 +10,7 @@ plt.rcParams['font.sans-serif'] = ['SimHei']  # 支持中文显示
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 
-# DINA 模型相关函数（完全保持不变）
+# DINA 模型相关函数
 def compute_eta(Q, A):
     kowns = np.sum(Q * Q, axis=0)
     cross = np.dot(A, Q)
@@ -143,6 +143,99 @@ def get_priors(A_all, p_know, p_know_list):
             prior3[l] *= (p ** A_all[l, k] * (1 - p) ** (1 - A_all[l, k]))
     return [prior1, prior2, prior3, None]
 
+
+# 改进后的Q矩阵构建（内存优化版）
+def build_q_matrix(output_matrix, group_qs_ids, all_qs_ids, max_knowledge):
+    """
+    优化版Q矩阵构建函数
+    参数:
+        output_matrix: 原始知识点矩阵 (题目ID为行索引)
+        group_qs_ids: 当前组的题目ID列表
+        all_qs_ids: 所有有效题目ID集合
+        max_knowledge: 最大知识点数限制
+    返回:
+        Q: 优化后的Q矩阵 (知识点×题目)
+    """
+    # --- 步骤1: 筛选有效知识点 ---
+    # 统计每个知识点在output_matrix中的总覆盖率（排除当前组不存在的题目）
+    knowledge_coverage = np.zeros(output_matrix.shape[1])
+    for j, qs_id in enumerate(output_matrix.index):
+        if qs_id in all_qs_ids:
+            knowledge_coverage += output_matrix.loc[qs_id].values
+
+    # 选择覆盖题目最多的前max_knowledge个知识点
+    top_k_indices = np.argsort(-knowledge_coverage)[:max_knowledge]
+    top_k_indices = sorted(top_k_indices)  # 保持原始顺序
+
+    # --- 步骤2: 构建Q矩阵（保留原有题目ID匹配逻辑）---
+    Q = np.zeros((len(top_k_indices), len(group_qs_ids)), dtype=int)
+
+    missing_qs = 0
+    for j, qs_id in enumerate(group_qs_ids):
+        if qs_id in all_qs_ids:
+            # 只选取top_k_indices对应的知识点列
+            Q[:, j] = output_matrix.loc[qs_id].values[top_k_indices]
+        else:
+            missing_qs += 1
+            Q[:, j] = 0  # 保持原有逻辑
+
+    if missing_qs > 0:
+        print(f"警告: 共 {missing_qs} 个题目未在output_matrix中找到，已填充为0")
+
+    # --- 步骤3: 后处理验证 ---
+    # 移除全零知识点（如果因题目缺失导致）
+    non_zero_knowledge = np.where(Q.sum(axis=1) > 0)[0]
+    Q = Q[non_zero_knowledge, :]
+
+    # 确保每个知识点至少覆盖3题（否则移除）
+    valid_knowledge = np.where(Q.sum(axis=1) >= 3)[0]
+    if len(valid_knowledge) < Q.shape[0]:
+        print(f"优化: 移除 {Q.shape[0] - len(valid_knowledge)} 个低覆盖知识点")
+        Q = Q[valid_knowledge, :]
+
+    print(f"最终Q矩阵形状: {Q.shape} (知识点×题目)")
+    print(f"知识点覆盖统计: 平均每题 {Q.sum(axis=0).mean():.2f} 个知识点")
+
+    return Q
+
+
+def generate_random_q_matrix(n_knowledge, n_questions, sparsity=0.1, min_knowledge_per_q=1, min_q_per_knowledge=1):
+    """
+    生成随机 Q 矩阵
+    Args:
+        n_knowledge: 知识点数
+        n_questions: 题目数
+        sparsity: Q 矩阵中 1 的比例（默认 10%）
+        min_knowledge_per_q: 每题至少关联的知识点数
+        min_q_per_knowledge: 每个知识点至少关联的题数
+    """
+    Q = np.zeros((n_knowledge, n_questions), dtype=int)
+
+    # 确保每题至少关联 min_knowledge_per_q 个知识点
+    for q in range(n_questions):
+        k_indices = np.random.choice(n_knowledge, min_knowledge_per_q, replace=False)
+        Q[k_indices, q] = 1
+
+    # 随机填充剩余位置，控制稀疏度
+    target_ones = int(sparsity * n_knowledge * n_questions) - min_knowledge_per_q * n_questions
+    if target_ones > 0:
+        flat_indices = np.random.choice(
+            np.where(Q.ravel() == 0)[0],  # 仅选择未被初始化的位置
+            size=target_ones,
+            replace=False
+        )
+        Q.ravel()[flat_indices] = 1
+
+    # 确保每个知识点至少关联 min_q_per_knowledge 道题
+    for k in range(n_knowledge):
+        if np.sum(Q[k, :]) < min_q_per_knowledge:
+            q_indices = np.random.choice(n_questions, min_q_per_knowledge, replace=False)
+            Q[k, q_indices] = 1
+
+    return Q
+
+# 使用方式
+
 # 加载原始数据和分组结果
 data = pd.read_csv(r"C:\Users\BNT\转换\cleaned_data_20250326_0931.csv")
 group_data = pd.read_csv('optimal_student_groups_leiden.csv')
@@ -167,13 +260,17 @@ print(f"学生数大于 1 的组数: {len(valid_groups)}")
 all_results = []
 
 # 读取 output_matrix.xlsx 文件
-output_matrix = pd.read_excel('output_matrix.xlsx', index_col=0)  # 假设第一列是知识点名称（如 Q1, Q2, ...）
+output_matrix = pd.read_excel('516matrix.xlsx', index_col=0)
+# output_matrix.index = output_matrix.index.str.extract(r'(\d+)')[0].astype(int)
+print("output_matrix :", output_matrix)
 print("output_matrix 的列名（题目 ID）:", output_matrix.columns.tolist())
-print("output_matrix 的行名（知识点）:", output_matrix.index.tolist())
+print("output_matrix 的行名（题目ID）:", output_matrix.index.tolist())
 
 # 获取知识点数量（行数）和所有可能的题目 ID（列名）
 n_kno_total = output_matrix.shape[0]  # 知识点数量（例如 18）
-all_qs_ids = output_matrix.columns  # 所有题目 ID
+all_qs_ids = output_matrix.index  # 所有题目 ID
+
+print(all_qs_ids)
 
 # 逐组分析（只处理学生数大于 1 的组）
 for group_id in tqdm(valid_groups):
@@ -187,6 +284,8 @@ for group_id in tqdm(valid_groups):
     group_data_subset = data[data['student_id'].isin(group_students)].drop_duplicates(subset=['student_id', 'qs_id'])
     X_group_df = group_data_subset.pivot(index='student_id', columns='qs_id', values='qs_validity').fillna(0)
     X_group = X_group_df.values
+
+
     n_questions = X_group.shape[1]
     print(f"组 {group_id} - 学生数: {X_group.shape[0]}, 题目数: {n_questions}")
 
@@ -195,33 +294,52 @@ for group_id in tqdm(valid_groups):
     print(X_group_df.iloc[:min(5, n_students), :min(10, n_questions)])
 
     # ============= 修改点：从 output_matrix.xlsx 构建 Q 矩阵 =============
-    max_knowledge = 8  # 设置最大知识点数量
+    max_knowledge = 20
     n_kno = min(max(1, n_questions // 5), max_knowledge, n_kno_total)  # 知识点数量限制
     group_qs_ids = X_group_df.columns  # 组内题目 ID
 
-    # 初始化 Q 矩阵
-    Q = np.zeros((n_kno, n_questions), dtype=int)
+    Q = build_q_matrix(
+        output_matrix=output_matrix,
+        group_qs_ids=X_group_df.columns.tolist(),
+        all_qs_ids=set(output_matrix.index),  # 转为集合加速查询
+        max_knowledge=max_knowledge
+)
+    # 替换原 Q 矩阵生成代码
 
-    # 遍历组内每个题目 ID，查找其在 output_matrix 中的对应列
-    for j, qs_id in enumerate(group_qs_ids):
-        if qs_id in all_qs_ids:
-            # 找到该题目在 output_matrix 中的列
-            qs_col = output_matrix[qs_id].values
-            # 取前 n_kno 个知识点（如果知识点数量超过 n_kno）
-            Q[:, j] = qs_col[:n_kno]
-        else:
-            # 如果题目 ID 不在 output_matrix 中，保持全 0
-            print(f"警告: 组 {group_id} 中的题目 ID {qs_id} 未在 output_matrix.xlsx 中找到，Q 矩阵对应列将填充为 0")
+
+    # sparsity = 0.30  # 目标稀疏度（15% 的 1）
+    #
+    # Q = generate_random_q_matrix(
+    #     n_knowledge=n_kno,
+    #     n_questions=n_questions,
+    #     sparsity=sparsity,
+    #     min_knowledge_per_q=1,
+    #     min_q_per_knowledge=5  # 每个知识点至少关联 5 题
+    # )
+
+    # 检查生成结果
+    print("Q 矩阵形状:", Q.shape)
+    print("1 的比例:", np.mean(Q))
+    print("每知识点关联题数:", np.sum(Q, axis=1))
+    print("每题关联知识点数:", np.sum(Q, axis=0))
 
     print(f"组 {group_id} - 生成的 Q 矩阵形状: {Q.shape} (知识点数限制为≤{max_knowledge})")
 
     # 打印 Q 矩阵（前 5 行，前 10 列）
     print(f"组 {group_id} - Q 矩阵 (前 5 行，前 10 列):")
-    print(pd.DataFrame(Q, index=[f"K{i + 1}" for i in range(n_kno)],
+    print(pd.DataFrame(Q, index=[f"K{i + 1}" for i in range(Q.shape[0])],
                        columns=X_group_df.columns[:n_questions]).iloc[:, :min(10, n_questions)])
+    # 统计 Q 矩阵中 1 和 0 的数量
+    n_ones = np.sum(Q == 1)
+    n_zeros = np.sum(Q == 0)
+    total_elements = Q.size
+    print(f"\nQ 矩阵统计信息:")
+    print(f"- 1 的数量: {n_ones} (占比: {n_ones / total_elements:.2%})")
+    print(f"- 0 的数量: {n_zeros} (占比: {n_zeros / total_elements:.2%})")
+    print(f"- 矩阵形状: {Q.shape} (知识点数: {Q.shape[0]}, 题目数: {Q.shape[1]})")
 
     # 初始化先验
-    A_all = np.array(list(product([0, 1], repeat=n_kno)))
+    A_all = np.array(list(product([0, 1], repeat=Q.shape[0])))
     priors = get_priors(A_all, p_know=0.7, p_know_list=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
     d = [2 * Q.shape[1], 2 * Q.shape[1], 2 * Q.shape[1], 2 * Q.shape[1] + 2 ** Q.shape[0]]
 
@@ -236,25 +354,26 @@ for group_id in tqdm(valid_groups):
     # 测试四种先验
     for i in range(4):
         print(f"组 {group_id} - 测试先验模式 {i}")
+
+        # 训练 EM 模型
         pi_t, g_t, s_t, gamma = em(X_group, Q, maxIter=1000, tol=1e-6, prior=priors[i])
         ss.append(s_t)
         gs.append(g_t)
         A, A_idx = solve(gamma, Q.shape[0])
         results.append((pi_t, g_t, s_t, gamma, A, A_idx))
 
-        # 生成模拟数据
+        # 模拟数据生成
         eta = compute_eta(Q, A)
         propa = compute_propa(eta, s_t, g_t)
         X1 = np.random.binomial(1, propa)
         X_sim.append(X1)
 
-        # 评估
-        eval_results = evaluate(X1, Q, priors)
-        df_result = score(eval_results, A, A_idx, s_t, g_t)
+        # 用当前模型的结果评分，不再重新评估其他先验
+        df_result = score([(pi_t, g_t, s_t, gamma, A, A_idx)], A, A_idx, s_t, g_t)
         print(f"组 {group_id} - 先验 {i} 的评估结果:")
         print(df_result)
 
-        # 计算联合对数似然和 AIC
+        # 联合似然 + AIC
         LL = joint_loglike(X_group, Q, s_t, g_t, pi_t)
         NLL.append(-LL)
         AIC.append(-2 * LL + d[i])
