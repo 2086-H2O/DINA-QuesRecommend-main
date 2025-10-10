@@ -5,10 +5,14 @@ from tqdm import tqdm
 from itertools import product
 from sklearn.metrics import accuracy_score, f1_score, log_loss
 from sklearn.metrics import r2_score, explained_variance_score, mean_absolute_error
+import os
+from datetime import datetime
 
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 支持中文显示
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
+import matplotlib
+matplotlib.use('Agg')  # 不弹出图片窗口，直接保存
 
 # DINA 模型相关函数
 def compute_eta(Q, A):
@@ -212,6 +216,7 @@ def run_dina_self_consistency_test(
         print(f"\n===== Group {group_id} - DINA 自洽性检验 =====")
 
     # Step 1: 拟合原始数据
+    print("1. EM 拟合原始数据...")
     pi, g, s, gamma = em(X_group, Q, maxIter=maxIter, tol=tol, prior=prior)
     A, A_idx = solve(gamma, Q.shape[0])
 
@@ -237,17 +242,85 @@ def run_dina_self_consistency_test(
     NLL = -LL
     AIC_value = -2 * LL + d if d is not None else None
 
-    # Step 7: 可视化参数对比
-    plt.figure(figsize=(10, 3))
-    plt.subplot(1, 2, 1)
-    plt.plot(s, label='原始 slip'); plt.plot(s_sim, label='回归 slip')
-    plt.legend(); plt.title(f'Group {group_id} - Slip对比')
 
-    plt.subplot(1, 2, 2)
-    plt.plot(g, label='原始 guess'); plt.plot(g_sim, label='回归 guess')
-    plt.legend(); plt.title(f'Group {group_id} - Guess对比')
-    plt.tight_layout()
-    plt.show()
+
+    # Step 7: 可视化参数对比，保存到文件夹
+
+    # plt.figure(figsize=(10, 3))
+    # plt.subplot(1, 2, 1)
+    # plt.plot(s, label='原始 slip'); plt.plot(s_sim, label='回归 slip')
+    # plt.legend(); plt.title(f'Group {group_id} - Slip对比')
+
+    # plt.subplot(1, 2, 2)
+    # plt.plot(g, label='原始 guess'); plt.plot(g_sim, label='回归 guess')
+    # plt.legend(); plt.title(f'Group {group_id} - Guess对比')
+    # plt.tight_layout()
+    # plt.show()
+
+    # 创建带时间戳的结果文件夹 ---
+    timestamp = datetime.now().strftime("%Y%m%d_%H%MS")
+    results_dir = f"test_results_{timestamp}"
+    os.makedirs(results_dir, exist_ok=True)
+    print(f"所有结果将保存在文件夹: '{results_dir}'")
+
+    # --- 修改后的绘图与保存逻辑 ---
+
+    # 1. 找出最佳模型
+    best_model_idx = np.argmin(AIC)
+    best_aic = AIC[best_model_idx]
+    labels = ["先验分布D1", "先验分布D2", "先验分布D3", "无先验模型"]
+    
+    # 2. 绘制并保存 NLL 和 AIC 比较图
+    plt.figure(figsize=(12, 6))
+    bars = plt.bar(np.arange(4), AIC, width=0.4, label="AIC")
+    bars[best_model_idx].set_color('salmon') # 高亮最佳模型
+    plt.xticks(np.arange(4), labels)
+    plt.ylabel("AIC 值 (越低越好)", fontsize=14)
+    # 在标题中加入指标
+    plt.title(f"组 {group_id} - AIC 比较 (最佳模型: {labels[best_model_idx]}, AIC={best_aic:.2f})", fontsize=16)
+    plt.legend()
+    # 构造保存路径并保存
+    save_path = os.path.join(results_dir, f'group_{group_id}_aic_comparison.png')
+    plt.savefig(save_path)
+    plt.close() # 关闭图形，释放内存
+
+    # 3. 绘制并保存失误率图
+    avg_slip = np.mean(ss[best_model_idx]) # 计算最佳模型的平均失误率
+    plt.figure(figsize=(12, 6))
+    x = np.arange(1, n_questions + 1)
+    for i in range(4):
+        plt.plot(x, ss[i], label=f"{labels[i]}", linestyle="--", alpha=0.6)
+    # 高亮最佳模型的曲线
+    plt.plot(x, ss[best_model_idx], label=f"最佳模型: {labels[best_model_idx]}", linewidth=2.5, color='salmon')
+    plt.legend(fontsize=12)
+    plt.xticks(x)
+    plt.xlabel("试题编号", fontsize=14)
+    plt.ylabel("失误率", fontsize=14)
+    # 在标题中加入指标
+    plt.title(f"组 {group_id} - 失误率 (最佳模型平均值: {avg_slip:.4f})", fontsize=16)
+    save_path = os.path.join(results_dir, f'group_{group_id}_slip_rate.png')
+    plt.savefig(save_path)
+    plt.close()
+
+    # 4. 绘制并保存猜对率图
+    avg_guess = np.mean(gs[best_model_idx]) # 计算最佳模型的平均猜测率
+    plt.figure(figsize=(12, 6))
+    for i in range(4):
+        plt.plot(x, gs[i], label=f"{labels[i]}", linestyle="--", alpha=0.6)
+    # 高亮最佳模型的曲线
+    plt.plot(x, gs[best_model_idx], label=f"最佳模型: {labels[best_model_idx]}", linewidth=2.5, color='salmon')
+    plt.legend(fontsize=12)
+    plt.xticks(x)
+    plt.xlabel("试题编号", fontsize=14)
+    plt.ylabel("猜对率", fontsize=14)
+    # 在标题中加入指标
+    plt.title(f"组 {group_id} - 猜对率 (最佳模型平均值: {avg_guess:.4f})", fontsize=16)
+    save_path = os.path.join(results_dir, f'group_{group_id}_guess_rate.png')
+    plt.savefig(save_path)
+    plt.close()
+
+
+
 
     # Step 8: 解释性评估输出
     slip_eval = "偏差较大，模型对 slip 敏感" if slip_error > 0.2 else "偏差较小，slip 拟合较好"

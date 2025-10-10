@@ -72,7 +72,7 @@ def compute_theta(X, gamma, eta):
     R0 = np.sum(R0, axis=0)
     R1 = np.sum(R1, axis=0)
 
-    I0[I0 <= 0] = 1e-15
+    I0[I0 <= 0] = 1e-15 # 把小于等于0的数都替换成1e-15
     I1[I1 <= 0] = 1e-15
 
     # 更新猜对率和失误率
