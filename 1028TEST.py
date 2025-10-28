@@ -439,6 +439,24 @@ def main():
         all_qs_ids = set(output_matrix.index) # Q矩阵中的所有题目ID
         n_kno_total = output_matrix.shape[1] # 总知识点数
         print(f"总知识点数 (K_total): {n_kno_total}")
+
+        # --- 新增代码：打印Top 20高覆盖率知识点 ---
+        try:
+            print("\n--- 正在计算 Top 20 高覆盖率知识点 ---")
+            # Q矩阵的列是知识点，行是题目
+            # .sum(axis=0) 会计算每个知识点(列)被多少个题目(行)所覆盖
+            knowledge_coverage = output_matrix.sum(axis=0)
+            
+            # 使用 .nlargest(20) 自动排序并选出前20个
+            top_20_knowledge_points = knowledge_coverage.nlargest(127)
+            
+            print("Top 20 知识点 (ID: 覆盖题目数):")
+            # .to_string() 可以确保打印完整，不会被省略
+            print(top_20_knowledge_points.to_string())
+            print("----------------------------------------\n")
+        except Exception as e:
+            print(f"打印Top 20知识点时出错: {e}")
+        # --- 新增代码结束 ---
         
         # 过滤掉学生数为 1 的组
         group_counts = group_data['group'].value_counts()
