@@ -6,7 +6,7 @@ from itertools import product
 from sklearn.metrics import accuracy_score, f1_score, log_loss
 from sklearn.metrics import r2_score, explained_variance_score, mean_absolute_error
 
-plt.rcParams['font.sans-serif'] = ['SimHei']  # 支持中文显示
+plt.rcParams['font.sans-serif'] = ['Noto Sans S Chinese']  # 支持中文显示
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 
@@ -165,6 +165,10 @@ def build_q_matrix(output_matrix, group_qs_ids, all_qs_ids, max_knowledge):
 
     # 选择覆盖题目最多的前max_knowledge个知识点
     top_k_indices = np.argsort(-knowledge_coverage)[:max_knowledge]
+
+    selected_knowledge_names = output_matrix.columns[top_k_indices].tolist()
+    print(f"为当前组挑选的 {len(selected_knowledge_names)} 个核心知识点是: {selected_knowledge_names}")
+
     top_k_indices = sorted(top_k_indices)  # 保持原始顺序
 
     # --- 步骤2: 构建Q矩阵（保留原有题目ID匹配逻辑）---
@@ -387,7 +391,7 @@ for group_id in tqdm(valid_groups):
     print(X_group_df.iloc[:min(5, n_students), :min(10, n_questions)])
 
     # ============= 修改点：从 output_matrix.xlsx 构建 Q 矩阵 =============
-    max_knowledge = 10
+    max_knowledge = 40
     n_kno = min(max(1, n_questions // 5), max_knowledge, n_kno_total)  # 知识点数量限制
     group_qs_ids = X_group_df.columns  # 组内题目 ID
 
@@ -445,14 +449,14 @@ for group_id in tqdm(valid_groups):
     X_sim = []
 
     # 测试四种先验
-    for i in range(4):
-        print(f"组 {group_id} - 测试先验模式 {i}")
+    # for i in range(4):
+    #     print(f"组 {group_id} - 测试先验模式 {i}")
 
-        result = run_dina_self_consistency_test(group_id=group_id,
-            X_group=X_group,
-            Q=Q,
-            prior=priors[i],
-            d=2 * Q.shape[0] + 2 ** Q.shape[1],  # 模型自由度（大致），可选
-            verbose=True)
-        print(result["slip_error"], result["X_accuracy"], result["AIC"])
+    #     result = run_dina_self_consistency_test(group_id=group_id,
+    #         X_group=X_group,
+    #         Q=Q,
+    #         prior=priors[i],
+    #         d=2 * Q.shape[0] + 2 ** Q.shape[1],  # 模型自由度（大致），可选
+    #         verbose=True)
+    #     print(result["slip_error"], result["X_accuracy"], result["AIC"])
 

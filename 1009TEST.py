@@ -8,7 +8,7 @@ from sklearn.metrics import r2_score, explained_variance_score, mean_absolute_er
 import os
 from datetime import datetime
 
-plt.rcParams['font.sans-serif'] = ['SimHei']  # 支持中文显示
+plt.rcParams['font.sans-serif'] = ['Noto Sans S Chinese']  # 支持中文显示
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 import matplotlib
