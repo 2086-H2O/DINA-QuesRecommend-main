@@ -5,7 +5,7 @@ import requests
 import os
 
 # 🌟 从同级目录导入提示词
-from prompt2 import prompt
+from prompt2_5 import prompt
 
 # ================= 配置区 =================
 # DeepSeek API 配置
@@ -15,7 +15,7 @@ MODEL_NAME = "deepseek-chat"
 
 # 文件路径配置
 INPUT_FILE = "所有题目.xlsx"
-NOTE = "4+10_2"
+NOTE = "4+10_2_7"
 OUTPUT_DIR = f"./outputs/{NOTE}_results"  # 📂 指定输出文件夹路径
 BATCH_SIZE = 20
 
