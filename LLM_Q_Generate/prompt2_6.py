@@ -13,7 +13,7 @@ prompt = """
 * **[1] 事实记忆 (Factual Knowledge)**
     * 符号识别、定义背诵。关键词：识别、记忆、复述、定义。
 
-* **[2] 概念理解 (Conceptual Understanding)**
+* **[2] 概念理解 (Conceptual Understanding)**   
     * 能解释原理，能看懂图。关键词：解释、分类、总结、原理说明。
 
 * **[3] 程序与应用 (Procedural Application)**
