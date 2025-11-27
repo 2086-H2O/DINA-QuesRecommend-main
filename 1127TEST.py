@@ -1,5 +1,5 @@
 """
-测试第一个LLM生成的Q矩阵
+测试第三个LLM生成的Q矩阵
 """
 import numpy as np
 import pandas as pd
@@ -20,7 +20,7 @@ import tracemalloc
 TARGET_GROUP_INDICES = [0,1,2] 
 
 # 新 Q 矩阵的文件名
-NEW_Q_MATRIX_FILE = r"C:\Users\User\Documents\Developer 2086\DINA-QuesRecommend-main\LLM_Q_Generate\outputs\4+10_results\DINA_Q_Matrix_4+10.xlsx"  # 请确保文件在此路径
+NEW_Q_MATRIX_FILE = r"C:\Users\User\Documents\Developer 2086\DINA-QuesRecommend-main\LLM_Q_Generate\outputs\4+10_2_results\DINA_Q_Matrix_4+10_2.xlsx"  # 请确保文件在此路径
 # 如果是 Excel 文件，请改为 pd.read_excel
 
 # ==========================================
@@ -187,25 +187,28 @@ def build_fixed_q_matrix(full_q_df, group_qs_ids):
     """
     根据组内题目 (group_qs_ids) 从总 Q 矩阵 (full_q_df) 中切片
     """
-    # 确保索引类型一致
+    # 确保索引类型一致: 统统转为字符串
     group_qs_ids_str = [str(q) for q in group_qs_ids]
+    # 确保 Q 矩阵索引也是字符串
+    full_q_df.index = full_q_df.index.astype(str)
     available_qs = set(full_q_df.index)
     
-    # 找出交集题目
+    # 找出交集题目 (Q矩阵里有的，且学生做过的)
     valid_qs = [q for q in group_qs_ids_str if q in available_qs]
     
     if not valid_qs:
-        return None, 0
+        return None, []
     
     # 切片: 行=题目(valid_qs), 列=知识点
-    # 注意: DINA 输入要求 Q 矩阵形状为 (知识点, 题目)，所以需要转置 .T
     subset_df = full_q_df.loc[valid_qs]
     
     # 转置: 行=知识点, 列=题目
     Q_matrix = subset_df.values.T 
     
-    print(f"组内题目数: {len(group_qs_ids)} -> 有 Q 标注的题目数: {len(valid_qs)}")
-    return Q_matrix, len(valid_qs)
+    print(f"组内题目数: {len(group_qs_ids)} -> Q矩阵匹配到的题目数: {len(valid_qs)}")
+    
+    # === 修改点：返回 Q 矩阵 和 题目ID列表 ===
+    return Q_matrix, valid_qs
 
 # ==========================================
 #               4. 主程序
@@ -261,19 +264,28 @@ def main():
         group_qs_ids = X_df.columns.tolist()
         
         # 4.3 构建适配该组的 Q 矩阵
-        Q, n_qs_match = build_fixed_q_matrix(full_q_df, group_qs_ids)
+        Q, final_qs_list = build_fixed_q_matrix(full_q_df, group_qs_ids)
         
-        if Q is None:
+        if Q is None or len(final_qs_list) == 0:
             print("该组题目与 Q 矩阵无交集，跳过。")
             continue
             
         # Q 形状: (n_kno, n_qs_match)
         # X 形状需对齐: (n_stu, n_qs_match)
-        # 注意: build_fixed_q_matrix 只保留了有效题目，X 也需要只保留这些列
-        valid_qs_cols = [q for q in group_qs_ids if q in full_q_df.index]
-        X_aligned = X_df[valid_qs_cols].values
+        
+        # === 关键修改：直接使用 Q 矩阵确定的题目列表来切片 X ===
+        # 确保 X_df 的列名也是字符串，以匹配 final_qs_list
+        X_df.columns = X_df.columns.astype(str)
+        
+        # 只保留 Q 矩阵中存在的题目
+        X_aligned = X_df[final_qs_list].values
         
         print(f"数据对齐后: 学生 N={X_aligned.shape[0]}, 题目 J={X_aligned.shape[1]}, 知识点 K={Q.shape[0]}")
+        
+        # 二次检查维度 (防止报错)
+        if Q.shape[1] != X_aligned.shape[1]:
+            print(f"❌ 严重错误: 维度依然不匹配! Q={Q.shape}, X={X_aligned.shape}")
+            continue
 
         # 4.4 准备先验 (独立同分布 P2)
         n_kno = Q.shape[0]

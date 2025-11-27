@@ -1,5 +1,5 @@
 """
-测试第一个LLM生成的Q矩阵
+测试第二个LLM生成的Q矩阵
 """
 import numpy as np
 import pandas as pd
@@ -20,7 +20,7 @@ import tracemalloc
 TARGET_GROUP_INDICES = [0,1,2] 
 
 # 新 Q 矩阵的文件名
-NEW_Q_MATRIX_FILE = r"C:\Users\User\Documents\Developer 2086\DINA-QuesRecommend-main\LLM_Q_Generate\outputs\4+10_results\DINA_Q_Matrix_4+10.xlsx"  # 请确保文件在此路径
+NEW_Q_MATRIX_FILE = r"C:\Users\User\Documents\Developer 2086\DINA-QuesRecommend-main\LLM_Q_Generate\outputs\4+10_改_results\DINA_Q_Matrix_4+10_改.xlsx"  # 请确保文件在此路径
 # 如果是 Excel 文件，请改为 pd.read_excel
 
 # ==========================================
