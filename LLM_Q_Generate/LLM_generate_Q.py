@@ -9,7 +9,7 @@ from prompt2_6 import prompt
 
 # ================= 配置区 =================
 # DeepSeek API 配置
-API_KEY = "sk-2636e69fcc0744fa8b975e2b82eaa345"
+API_KEY = ""
 API_URL = "https://api.deepseek.com/chat/completions"
 MODEL_NAME = "deepseek-chat"
 
